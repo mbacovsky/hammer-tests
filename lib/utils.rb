@@ -18,7 +18,7 @@ end
 
 def opts_to_hash(opts)
   internal = {}
-  return internal if opts.empty?
+  return internal if opts.nil? || opts.empty?
   opts.split(' ').each do |key, value|
     internal[key.sub(/^[-]+/, '').gsub('-','_')] = value
   end

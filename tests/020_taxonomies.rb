@@ -111,9 +111,13 @@ IDX = '%05d' % sequence.next.to_s
     :admin => true
 }
 
-@domain = {
-  :name => "domain #{IDX} #{rand(1000)}"
-}
+def new_domain
+  @uniq_domain_counter ||= 0
+  @uniq_domain_counter += 1
+  {
+      :name => "domain #{IDX} #{@uniq_domain_counter}"
+  }
+end
 
 def test_domain_creation(user, domain, expected_organizations)
 	as_user(user[:login], user[:password]) do
@@ -143,10 +147,17 @@ section "taxonomies" do
         hammer 'user', 'create', @admin_one_org_no_default
         
         section "created foreman resource has org set" do
-          test_domain_creation(@admin_one_org_no_default, @domain, @org_1[:name])
+          test_domain_creation(@admin_one_org_no_default, new_domain, @org_1[:name])
         end
       end
-
+      
+      section "one org default" do
+        hammer 'user', 'create', @admin_one_org_default
+  
+        section "created foreman resource has org set" do
+          test_domain_creation(@admin_one_org_default, new_domain, @org_1[:name])
+        end
+      end
     end
 
     section "Organization admin" do
@@ -157,7 +168,7 @@ section "taxonomies" do
         hammer 'user', 'create', @org_admin_one_org_no_default
         
         section "created foreman resource has org set" do
-          test_domain_creation(@org_admin_one_org_no_default, @domain, @org_1[:name])
+          test_domain_creation(@org_admin_one_org_no_default, new_domain, @org_1[:name])
         end
       end
 
@@ -165,7 +176,7 @@ section "taxonomies" do
         hammer 'user', 'create', @org_admin_one_org_default
         
         section "created foreman resource has org set" do
-          test_domain_creation(@org_admin_one_org_default, @domain, @org_1[:name])
+          test_domain_creation(@org_admin_one_org_default, new_domain, @org_1[:name])
         end
       end
 

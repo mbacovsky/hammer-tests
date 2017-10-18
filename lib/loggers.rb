@@ -253,6 +253,7 @@ class LogCropper < FileLogger
   end
 
   def clear_log
+    return unless File.exist?(log_file_path)
     File.open(log_file_path, 'w') do |f|
     end
   end

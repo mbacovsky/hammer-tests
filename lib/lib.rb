@@ -4,6 +4,8 @@ require File.join(File.dirname(__FILE__), 'loggers')
 
 
 @stop_on_failure = (ENV['HT_STOP_ON_FAILURE'] == 'true')
+@hammer_core_args = {:username => 'admin', :password =>'changeme'}
+@hammer_core_args.merge!(opts_to_hash(ENV['HT_HAMMER_ARGS']) || {})
 
 class CommandResult
 
@@ -49,6 +51,9 @@ class Statistics
   end
 end
 
+def sequence
+  @sequence ||= Sequence.new('~/.hammer-test-sequence')
+end
 
 def stats
   @stats ||= Statistics.new("Tests")
@@ -87,10 +92,16 @@ def logger
   @logger
 end
 
-
+def as_user(login, password, &block)
+  backup = @hammer_core_args.dup
+  @hammer_core_args[:username] = login
+  @hammer_core_args[:password] = password
+  yield
+  @hammer_core_args[:username] = backup[:username]
+  @hammer_core_args[:password] = backup[:password]
+end
 
 def hammer(*args, &block)
-
   if (args[-1].is_a? Hash)
     args += args.pop.to_opts
   elsif (args[-1].is_a? Array)
@@ -106,8 +117,10 @@ def hammer(*args, &block)
   result = CommandResult.new
 
   original_args = args.clone
+  original_args.unshift(*(@hammer_core_args.to_opts)) unless @hammer_core_args.empty?
   original_args.unshift("hammer")
 
+  args.unshift(*(@hammer_core_args.to_opts)) unless @hammer_core_args.empty?
   args.unshift(ENV['HT_HAMMER_CMD'] || "hammer")
 
   logger.log_before_command(original_args.join(" "), @command_cnt, current_section)

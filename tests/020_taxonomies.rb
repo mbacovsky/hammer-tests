@@ -1,19 +1,3 @@
-"
-na ose x
-- admin
-- org admin
-- common user
-na ose y
-- jedna org
-- dve org
-na ose z
-- default org set
-- default org unset
-na ose w
-- resource z Foremana (domain?)
-- resource z katella (product?)
-"
-
 IDX = '%05d' % sequence.next.to_s
 
 @org_1 = {
@@ -144,36 +128,60 @@ def new_product
   @uniq_product_counter ||= 0
   @uniq_product_counter += 1
   {
-      :name => "product_#{IDX}_#{@uniq_product_counter}"
+      :name => "product_#{IDX}_#{@uniq_product_counter}",
   }
 end
 
-def test_domain_creation(user, domain, expected_organizations)
+def test_domain_creation(user, domain, org, expected_organizations)
   as_user(user[:login], user[:password]) do
-    simple_test 'domain', 'create', domain
+    section "create domain" do
+      res = hammer "--csv", 'domain', 'create', domain
+      out = SimpleCsvOutput.new(res.stdout)
+      domain_id = out.column("Id")
+      test_result res
+    end
 
-    res = hammer "domain", "info", "--name", domain[:name]
-    test_result res
+    section "update domain" do
+      simple_test 'domain', 'update', "--name", domain[:name], "--description", domain[:name]
+    end
 
-    out = ShowOutput.new(res.stdout)
+    section "list doamins within org" do
+      res = hammer "domain", "list", "--organization-id", org[:id]
+      test_result res # failure for Beta, should work in GA
+    end
 
-    test "domain is within expected org" do
-      out.column('Organizations') == expected_organizations
+    section "domain is in right org by domain info" do
+      res = hammer "domain", "info", "--name", domain[:name]
+      test_result res
+
+      out = ShowOutput.new(res.stdout)
+
+      test "domain is within expected org" do
+        out.column('Organizations') == expected_organizations
+      end
     end
   end
 end
 
-def test_product_creation(user, product, expected_organization)
+def test_product_creation(user, product, org, expected_organization)
   as_user(user[:login], user[:password]) do
-    simple_test 'product', 'create', product
+    section "create product" do
+      simple_test 'product', 'create', product.merge({:organization_id => org[:id]})
+    end
 
-    res = hammer "product", "info", "--name", product[:name]
-    test_result res
+    section "update product" do
+      simple_test 'product', 'update', "--name", product[:name], "--organization-id", org[:id], "--description", "Description"
+    end
 
-    out = ShowOutput.new(res.stdout)
+    section "product is in right org by product info" do
+      res = hammer "product", "info", "--name", product[:name], "--organization-id", org[:id]
+      test_result res
 
-    test "product is within expected org" do
-      out.column('Organization') == expected_organization
+      out = ShowOutput.new(res.stdout)
+
+      test "product is within expected org" do
+        out.column('Organization') == expected_organization
+      end
     end
   end
 end
@@ -181,25 +189,75 @@ end
 
 section "taxonomies" do
   section "general usage" do
-    hammer "--csv", "organization", "create", @org_1
-    hammer "--csv", "organization", "create", @org_2
+    section "prepare org_1" do
+      res = hammer "--csv", "organization", "create", @org_1
+      out = SimpleCsvOutput.new(res.stdout)
+      @org_1[:id] = out.column("Id")
+      test_result res
+    end
+
+    section "prepare org_2" do
+      simple_test "--csv", "organization", "create", @org_2
+    end
 
     section "Admin" do
       section "one org no default" do
-        hammer 'user', 'create', @admin_one_org_no_default
+        section "prepare user" do
+          hammer 'user', 'create', @admin_one_org_no_default
+        end
         
         section "created foreman resource has org set" do
-          test_domain_creation(@admin_one_org_no_default, new_domain, @org_1[:name])
+          test_domain_creation(@admin_one_org_no_default, new_domain, @org_1, nil)
+        end
+
+	section "created katello resource has org set" do
+          test_product_creation(@admin_one_org_no_default, new_product, @org_1, @org_1[:name])
         end
       end
       
       section "one org default" do
-        hammer 'user', 'create', @admin_one_org_default
+        section "prepare user" do
+          simple_test 'user', 'create', @admin_one_org_default
+        end
   
         section "created foreman resource has org set" do
-          test_domain_creation(@admin_one_org_default, new_domain, @org_1[:name])
+          test_domain_creation(@admin_one_org_default, new_domain, @org_1, nil)
+        end
+
+	section "created katello resource has org set" do
+          test_product_creation(@admin_one_org_default, new_product, @org_1, @org_1[:name])
         end
       end
+
+      section "two orgs no default" do
+        section "prepare user" do
+          simple_test 'user', 'create', @admin_two_orgs_no_default
+        end
+  
+        section "created foreman resource has org set" do
+          test_domain_creation(@admin_two_orgs_no_default, new_domain, @org_1, nil)
+        end
+
+	section "created katello resource has org set" do
+          test_product_creation(@admin_two_orgs_no_default, new_product, @org_1, @org_1[:name])
+        end
+      end
+
+      section "two orgs default" do
+        section "prepare user" do
+          simple_test 'user', 'create', @admin_two_orgs_default
+        end
+  
+        section "created foreman resource has org set" do
+          test_domain_creation(@admin_two_orgs_default, new_domain, @org_1, nil)
+        end
+
+	section "created katello resource has org set" do
+          test_product_creation(@admin_two_orgs_default, new_product, @org_1, @org_1[:name])
+        end
+      end
+
+
     end
 
     section "Organization admin" do
@@ -210,11 +268,11 @@ section "taxonomies" do
         hammer 'user', 'create', @org_admin_one_org_no_default
         
         section "created foreman resource has org set" do
-          test_domain_creation(@org_admin_one_org_no_default, new_domain, @org_1[:name])
+          test_domain_creation(@org_admin_one_org_no_default, new_domain, @org_1, @org_1[:name])
         end
         
 	section "created katello resource has org set" do
-          test_product_creation(@org_admin_one_org_no_default, new_product, @org_1[:name])
+          test_product_creation(@org_admin_one_org_no_default, new_product, @org_1, @org_1[:name])
         end
       end
 
@@ -222,13 +280,28 @@ section "taxonomies" do
         hammer 'user', 'create', @org_admin_one_org_default
         
         section "created foreman resource has org set" do
-          test_domain_creation(@org_admin_one_org_default, new_domain, @org_1[:name])
+          test_domain_creation(@org_admin_one_org_default, new_domain, @org_1, @org_1[:name])
         end
 	
 	section "created katello resource has org set" do
-          test_product_creation(@org_admin_one_org_default, new_product, @org_1[:name])
+          test_product_creation(@org_admin_one_org_default, new_product, @org_1, @org_1[:name])
         end
       end
+
+      section "two orgs default" do
+        section "prepare user" do
+          simple_test 'user', 'create', @org_admin_two_orgs_default
+        end
+  
+        section "created foreman resource has org set" do
+          test_domain_creation(@org_admin_two_orgs_default, new_domain, @org_1, @org_1[:name])
+        end
+
+	section "created katello resource has org set" do
+          test_product_creation(@org_admin_two_orgs_default, new_product, @org_1, @org_1[:name])
+        end
+      end
+
     end
 
     section "Common user" do
@@ -239,7 +312,11 @@ section "taxonomies" do
         hammer 'user', 'create', @user_one_org_no_default
         
         section "created foreman resource has org set" do
-          test_domain_creation(@user_one_org_no_default, new_domain, @org_1[:name])
+          test_domain_creation(@user_one_org_no_default, new_domain, @org_1, @org_1[:name])
+        end
+
+	section "created katello resource has org set" do
+          test_product_creation(@user_one_org_no_default, new_product, @org_1, @org_1[:name])
         end
       end
 
@@ -247,8 +324,13 @@ section "taxonomies" do
         hammer 'user', 'create', @user_one_org_default
         
         section "created foreman resource has org set" do
-          test_domain_creation(@user_one_org_default, new_domain, @org_1[:name])
+          test_domain_creation(@user_one_org_default, new_domain, @org_1, @org_1[:name])
         end
+
+	section "created katello resource has org set" do
+          test_product_creation(@user_one_org_default, new_product, @org_1, @org_1[:name])
+        end
+
       end
     end
 

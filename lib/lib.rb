@@ -188,3 +188,9 @@ def test_result(res)
     res.ok?
   end
 end
+
+def test_failure(res)
+  test "expected failure" do
+    require 'pry'; binding.pry
+  end
+end
